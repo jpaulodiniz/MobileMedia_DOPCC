@@ -1,16 +1,19 @@
 delta dNotSorting {
 
-//package lancs.mobilemedia.core.ui.controller
+	//package lancs.mobilemedia.core.ui.controller
 
-	modifies lancs.mobilemedia.core.ui.controller.BaseController {
-
-		removes import lancs.mobilemedia.core.ui.controller.SortByViews;
-
-		removes SHOW_IMAGE_LIST_SORTING_MODE;
+	modifies lancs.mobilemedia.core.ui.controller.PhotoController {
 
 		modifies aditionalCommands() {
 			return;
 		}
+	}
+
+	modifies lancs.mobilemedia.core.ui.controller.PhotoListController {
+
+		removes import lancs.mobilemedia.core.ui.controller.SortByViews;
+
+		removes SHOW_IMAGE_LIST_SORTING_MODE;
 
 		removes exchange(ImageData, int, int);
 
@@ -37,9 +40,9 @@ delta dNotSorting {
 		removes import lancs.mobilemedia.lib.exceptions.ImageNotFoundException;
 		removes import lancs.mobilemedia.lib.exceptions.NullAlbumDataReference;
 
-		removes increasePhotoNumberOfViews(BaseController, String);
+		removes increasePhotoNumberOfViews(AbstractController, String);
 
-		modifies aditionalActions(BaseController controller) {
+		modifies aditionalActions(AbstractController controller) {
 			return;
 		}
 	}
