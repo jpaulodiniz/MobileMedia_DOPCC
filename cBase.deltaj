@@ -90,7 +90,9 @@ delta cBase {
 		import javax.microedition.rms.RecordStoreFullException;
 
 		import lancs.mobilemedia.core.ui.MainUIMidlet;
+		import lancs.mobilemedia.core.ui.controller.SortByViews; //complex core
 		import lancs.mobilemedia.core.ui.datamodel.AlbumData;
+		import lancs.mobilemedia.core.ui.datamodel.ImageData;
 		import lancs.mobilemedia.core.ui.screens.AlbumListScreen;
 		import lancs.mobilemedia.core.ui.screens.PhotoListScreen;
 		import lancs.mobilemedia.core.ui.screens.PhotoViewScreen;
@@ -101,6 +103,9 @@ delta cBase {
 		import lancs.mobilemedia.lib.exceptions.UnavailablePhotoAlbumException;
 
 		public class BaseController implements CommandListener, ControllerInterface {
+
+			public static final int SHOW_IMAGE_LIST_DEFAULT_MODE = 1;
+			public static final int SHOW_IMAGE_LIST_SORTING_MODE = 2; //complex core
 
 			private MainUIMidlet midlet;
 			private Display display;
@@ -140,6 +145,12 @@ delta cBase {
 				commands.put("Add", new AddPhoto());
 				commands.put("Save Add Photo", new SaveAddedPhoto());
 				commands.put("Delete", new DeletePhoto());
+				commands.put("Edit Label", new EditPhotoLabel());
+				aditionalCommands(); //complex core
+			}
+
+			private void aditionalCommands() { //complex core
+				commands.put("Sort by Views", new SortByViews());
 			}
 
 			public void init(AlbumData model) {
@@ -262,9 +273,7 @@ delta cBase {
 				}
 			}
 
-			public void showImage() {
-				List selected = ( List ) display.getCurrent();
-				String name = selected.getString(selected.getSelectedIndex());
+			public void showImage(String name) {
 				Image storedImage = null;
 				try {
 					storedImage = model.getImageFromRecordStore(currentStoreName, name);
@@ -291,6 +300,10 @@ delta cBase {
 			}
 
 			public void showImageList(String recordName) {
+				showImageList(recordName, SHOW_IMAGE_LIST_DEFAULT_MODE);
+			}
+
+			public void showImageList(String recordName, int imageListMode) {
 
 				if(recordName == null) recordName = currentStoreName;
 
@@ -299,9 +312,9 @@ delta cBase {
 				imageList.initMenu();
 				imageList.setCommandListener(this);
 
-				String [] labels = null;
+				ImageData [] images = null;
 				try {
-					labels = model.getImageNames(recordName);
+					images = model.getImages(recordName);
 				}
 				catch(UnavailablePhotoAlbumException e) {
 					Alert alert = new Alert("Error", "The list of photos can not be recovered", null, AlertType.ERROR);
@@ -309,12 +322,24 @@ delta cBase {
 					return;
 				}
 
-				for(int i = 0; i < labels.length; i ++) {
-					if(labels[i] != null) {
-						imageList.append(labels[i], null);
+				if(images == null) return;
+
+				fillImageList(imageList, images, imageListMode);
+
+				setCurrentScreen(imageList);
+			}
+
+			private void fillImageList(PhotoListScreen imageList, ImageData [] images, int imageListMode) {
+
+				if (imageListMode == SHOW_IMAGE_LIST_SORTING_MODE) { //complex core
+					bubbleSort(images);
+				}
+
+				for(int i = 0; i < images.length; i ++) {
+					if(images[i] != null) {
+						imageList.append(images[i].getImageLabel(), null);
 					}
 				}
-				setCurrentScreen(imageList);
 			}
 
 			public String getSelectedImageName() {
@@ -369,6 +394,36 @@ delta cBase {
 
 			public void createNewAlbumData() {
 				model = new AlbumData();
+			}
+
+			public void updateImage(ImageData image) {
+				try {
+					model.updateImageInfo(image, image);
+				}
+				catch(InvalidImageDataException e) {
+					e.printStackTrace();
+				}
+				catch(PersistenceMechanismException e) {
+					e.printStackTrace();
+				}
+			}
+
+			private void exchange(ImageData [] images, int pos1, int pos2) { //complex core
+				ImageData tmp = images[pos1];
+				images[pos1] = images[pos2];
+				images[pos2] = tmp;
+			}
+
+			public void bubbleSort(ImageData [] images) { //complex core
+			//System.out.print("Sorting by BubbleSort...");
+				for (int end = images.length; end > 1; end--) {
+					for (int current = 0; current < end - 1; 	current ++) {
+						if (images[current].getNumberOfViews() > images[current + 1].getNumberOfViews()) {
+							exchange(images, current, current + 1);
+						}
+					}
+				}
+				//System.out.println("done.");
 			}
 		}
 	}
@@ -514,6 +569,54 @@ delta cBase {
 	adds {
 		package lancs.mobilemedia.core.ui.controller;
 
+		import javax.microedition.lcdui.Alert;
+		import javax.microedition.lcdui.AlertType;
+		import javax.microedition.lcdui.Display;
+
+		import lancs.mobilemedia.core.ui.datamodel.ImageData;
+		import lancs.mobilemedia.core.ui.screens.NewLabelScreen;
+		import lancs.mobilemedia.lib.exceptions.ImageNotFoundException;
+		import lancs.mobilemedia.lib.exceptions.NullAlbumDataReference;
+
+		public class EditPhotoLabel implements ControllerCommandInterface {
+
+			public boolean execute(BaseController controller) {
+				String selectedImageName = controller.getSelectedImageName();
+				try {
+					ImageData image = controller.getModel().getImageInfo(selectedImageName);
+					PhotoController photoController = new PhotoController(image, controller);
+					NewLabelScreen formScreen = new NewLabelScreen("Edit Label Photo",
+						NewLabelScreen.LABEL_PHOTO);
+					formScreen.setCommandListener(photoController);
+					photoController.setScreen(formScreen);
+					controller.setCurrentScreen(formScreen);
+					formScreen = null;
+				}
+				catch(ImageNotFoundException e) {
+					Alert alert = new Alert("Error",
+						"The selected photo was not found in the mobile device", null,
+						AlertType.ERROR);
+					Display.getDisplay(controller.getMidlet()).setCurrent(alert,
+						Display.getDisplay(controller.getMidlet()).getCurrent());
+				}
+				catch(NullAlbumDataReference e) {
+					controller.createNewAlbumData();
+					Alert alert = new Alert("Error",
+						"The operation is not available. Try again later !", null,
+						AlertType.ERROR);
+					Display.getDisplay(controller.getMidlet()).setCurrent(alert,
+						Display.getDisplay(controller.getMidlet()).getCurrent());
+				}
+				return true;
+			}
+
+		}
+
+	}
+
+	adds {
+		package lancs.mobilemedia.core.ui.controller;
+
 		public class GoToPreviousScreen implements ControllerCommandInterface {
 
 			public boolean execute(BaseController controller) {
@@ -526,15 +629,16 @@ delta cBase {
 	adds {
 		package lancs.mobilemedia.core.ui.controller;
 
-		import lancs.mobilemedia.core.ui.screens.NewAlbumScreen;
+		import lancs.mobilemedia.core.ui.screens.NewLabelScreen;
 		import lancs.mobilemedia.core.util.Constants;
 
 		public class NewAlbum implements ControllerCommandInterface {
 
 			public boolean execute(BaseController controller) {
+
 				System.out.println("Create new Photo Album here");
 				controller.setCurrentScreenName(Constants.NEWALBUM_SCREEN);
-				NewAlbumScreen canv = new NewAlbumScreen("Add new Photo Album");
+				NewLabelScreen canv = new NewLabelScreen("Add new Photo Album", NewLabelScreen.NEW_ALBUM);
 				canv.setCommandListener(controller);
 				controller.setCurrentScreen(canv);
 				canv = null;
@@ -555,6 +659,73 @@ delta cBase {
 				controller.resetImageData();
 				controller.setCurrentScreenName(Constants.ALBUMLIST_SCREEN);
 				return true;
+			}
+		}
+	}
+
+	adds {
+		package lancs.mobilemedia.core.ui.controller;
+
+		import javax.microedition.lcdui.Command;
+		import javax.microedition.lcdui.CommandListener;
+		import javax.microedition.lcdui.Displayable;
+
+		import lancs.mobilemedia.core.ui.datamodel.ImageData;
+		import lancs.mobilemedia.core.ui.screens.NewLabelScreen;
+		import lancs.mobilemedia.core.util.Constants;
+
+		public class PhotoController implements CommandListener {
+
+			private BaseController nextController;
+			private ImageData image;
+			private NewLabelScreen screen;
+
+			public PhotoController(ImageData image, BaseController nextController) {
+				this.image = image;
+				this.nextController = nextController;
+			}
+
+			public boolean handleCommand(Command c, Displayable d) {
+				String label = c.getLabel();
+
+				if(label.equals("Save")) {
+				//System.out.println("PhotoController.handleCommand() :: Save Photo Label = " + this.screen.getLabelName());
+					this.getImage().setImageLabel(this.screen.getLabelName());
+					this.nextController.updateImage(image);
+					goToPreviousScreen();
+					return true;
+				}
+				else if(label.equals("Cancel")) {
+					goToPreviousScreen();
+					return true;
+				}
+				return true;
+			}
+
+			public void commandAction(Command c, Displayable d) {
+				handleCommand(c, d);
+			}
+
+			private void goToPreviousScreen() {
+			//System.out.println("<* PhotoController.goToPreviousScreen() *>");
+				this.nextController.showImageList(null); //[TODO JP fix] removing argument false
+				this.nextController.setCurrentScreenName(Constants.IMAGELIST_SCREEN);
+			}
+
+			public void setImage(ImageData image) {
+				this.image = image;
+			}
+
+			public ImageData getImage() {
+				return image;
+			}
+
+			public void setScreen(NewLabelScreen screen) {
+				this.screen = screen;
+			}
+
+			public NewLabelScreen getScreen() {
+				return screen;
 			}
 		}
 	}
@@ -614,7 +785,7 @@ delta cBase {
 		import javax.microedition.lcdui.Display;
 		import javax.microedition.rms.RecordStoreFullException;
 
-		import lancs.mobilemedia.core.ui.screens.NewAlbumScreen;
+		import lancs.mobilemedia.core.ui.screens.NewLabelScreen;
 		import lancs.mobilemedia.lib.exceptions.InvalidPhotoAlbumNameException;
 		import lancs.mobilemedia.lib.exceptions.PersistenceMechanismException;
 
@@ -622,8 +793,15 @@ delta cBase {
 
 			public boolean execute(BaseController controller) {
 				try {
-					controller.getModel().createNewPhotoAlbum((( NewAlbumScreen )
-							controller.getCurrentScreenName()).getAlbumName());
+					if(controller.getCurrentScreenName() instanceof NewLabelScreen) {
+						NewLabelScreen currentScreen = ( NewLabelScreen )
+						controller.getCurrentScreenName();
+						if(currentScreen.getFormType() == NewLabelScreen.NEW_ALBUM)
+						controller.getModel().createNewPhotoAlbum(currentScreen.getLabelName());
+						else if(currentScreen.getFormType() == NewLabelScreen.LABEL_PHOTO) {
+
+						}
+					}
 				}
 				catch(PersistenceMechanismException e) {
 					Alert alert = null;
@@ -643,6 +821,7 @@ delta cBase {
 						Display.getDisplay(controller.getMidlet()).getCurrent());
 					return true;
 				}
+
 				GoToPreviousScreen previousScreen = new GoToPreviousScreen();
 				return previousScreen.execute(controller);
 			}
@@ -672,13 +851,67 @@ delta cBase {
 		package lancs.mobilemedia.core.ui.controller;
 
 		import lancs.mobilemedia.core.util.Constants;
+		import lancs.mobilemedia.core.ui.controller.BaseController;
+		import lancs.mobilemedia.core.ui.controller.ControllerCommandInterface;
+
+		public class SortByViews implements ControllerCommandInterface { //complex core
+
+			public boolean execute(BaseController controller) {
+				controller.showImageList(controller.getCurrentStoreName(),
+						BaseController.SHOW_IMAGE_LIST_SORTING_MODE);
+				controller.setCurrentScreenName(Constants.IMAGELIST_SCREEN);
+				return true;
+			}
+		}
+	}
+
+	adds {
+		package lancs.mobilemedia.core.ui.controller;
+
+		import javax.microedition.lcdui.Alert;
+		import javax.microedition.lcdui.AlertType;
+		import javax.microedition.lcdui.Display;
+
+		import lancs.mobilemedia.core.ui.datamodel.ImageData;
+		import lancs.mobilemedia.core.util.Constants;
+		import lancs.mobilemedia.lib.exceptions.ImageNotFoundException;
+		import lancs.mobilemedia.lib.exceptions.NullAlbumDataReference;
 
 		public class ViewPhoto implements ControllerCommandInterface {
 
 			public boolean execute(BaseController controller) {
-				controller.showImage();
+				controller.showImage(controller.getSelectedImageName());
 				controller.setCurrentScreenName(Constants.IMAGE_SCREEN);
+				aditionalActions(controller); //complex core
 				return true;
+			}
+
+			private void aditionalActions(BaseController controller) { //complex core
+				increasePhotoNumberOfViews(controller, controller.getSelectedImageName());
+			}
+
+			protected void increasePhotoNumberOfViews(BaseController controller, String selectedImageName) { //complex core
+
+				try {
+					ImageData image = controller.getModel().getImageInfo(selectedImageName);
+					image.increaseNumberOfViews();
+					controller.updateImage(image);
+					System.out.println("<* BaseController.handleCommand() *> Image = " +
+							selectedImageName + "; # views = " + image.getNumberOfViews());
+				}
+				catch(ImageNotFoundException e) {
+					Alert alert = new Alert("Error", "The selected photo was not found in the mobile device",
+							null, AlertType.ERROR);
+					Display.getDisplay(controller.getMidlet()).setCurrent(alert,
+							Display.getDisplay(controller.getMidlet()).getCurrent());
+				}
+				catch(NullAlbumDataReference e) {
+					controller.createNewAlbumData();
+					Alert alert = new Alert("Error", "The operation is not available. Try again later !",
+							null, AlertType.ERROR);
+					Display.getDisplay(controller.getMidlet()).setCurrent(alert,
+							Display.getDisplay(controller.getMidlet()).getCurrent());
+				}
 			}
 		}
 	}
@@ -723,9 +956,10 @@ delta cBase {
 				return imageAccessor.getAlbumNames();
 			}
 
-			public String [] getImageNames(String recordName) throws UnavailablePhotoAlbumException {
+			public ImageData [] getImages(String recordName)
+					throws UnavailablePhotoAlbumException {
 
-				String [] result;
+				ImageData [] result;
 				try {
 					result = imageAccessor.loadImageDataFromRMS(recordName);
 				}
@@ -754,6 +988,7 @@ delta cBase {
 				String album = imageInfo.getParentAlbumName();
 				Image imageRec = imageAccessor.loadSingleImageFromRMS(album, imageName, imageId);
 				return imageRec;
+
 			}
 
 			public void resetImageData() throws PersistenceMechanismException {
@@ -763,6 +998,11 @@ delta cBase {
 				catch(InvalidImageDataException e) {
 					e.printStackTrace();
 				}
+			}
+
+			public ImageData getImageInfo(String name) throws ImageNotFoundException,
+			NullAlbumDataReference {
+				return imageAccessor.getImageInfo(name);
 			}
 
 			public Hashtable getImageInfoTable() {
@@ -796,6 +1036,11 @@ delta cBase {
 					imageAccessor = new ImageAccessor(this);
 					e.printStackTrace();
 				}
+			}
+
+			public void updateImageInfo(ImageData oldData, ImageData newData)
+					throws InvalidImageDataException, PersistenceMechanismException {
+				imageAccessor.updateImageInfo(oldData, newData);
 			}
 		}
 	}
@@ -942,10 +1187,10 @@ delta cBase {
 				}
 			}
 
-			public String [] loadImageDataFromRMS(String recordName)
+			public ImageData [] loadImageDataFromRMS(String recordName)
 					throws PersistenceMechanismException, InvalidImageDataException {
 
-				Vector labelVector = new Vector();
+				Vector imagesVector = new Vector();
 
 				try {
 
@@ -963,20 +1208,20 @@ delta cBase {
 						ImageData iiObject = converter.getImageInfoFromBytes(data);
 
 						String label = iiObject.getImageLabel();
-						labelVector.addElement(label);
+						imagesVector.addElement(label);
 						model.getImageInfoTable().put(label, iiObject);
+
 					}
 
 					infoStore.closeRecordStore();
-
 				}
 				catch(RecordStoreException rse) {
 					throw new PersistenceMechanismException(rse);
 				}
 
 				// Re-copy the contents into a smaller array
-				String [] labelArray = new String[labelVector.size()];
-				labelVector.copyInto(labelArray);
+				ImageData [] labelArray = new ImageData[imagesVector.size()];
+				imagesVector.copyInto(labelArray);
 				return labelArray;
 			}
 
@@ -1016,7 +1261,7 @@ delta cBase {
 				return success;
 			}
 
-			public ImageData getImageInfo(String imageName) 
+			public ImageData getImageInfo(String imageName)
 					throws ImageNotFoundException, NullAlbumDataReference {
 				if(model == null) throw new NullAlbumDataReference("Null reference to the Album data");
 
@@ -1046,6 +1291,7 @@ delta cBase {
 				byte [] imageData = null;
 
 				try {
+
 					RecordStore albumStore = RecordStore.openRecordStore(recordName, false);
 					imageData = albumStore.getRecord(recordId);
 					albumStore.closeRecordStore();
@@ -1134,6 +1380,7 @@ delta cBase {
 			private int foreignRecordId;
 			private String parentAlbumName;
 			private String imageLabel;
+			private int numberOfViews = 0; //complex core
 
 			public ImageData(int foreignRecordId, String parentAlbumName, String
 				imageLabel) {
@@ -1173,6 +1420,18 @@ delta cBase {
 
 			public void setParentAlbumName(String parentAlbumNameParam) {
 				parentAlbumName = parentAlbumNameParam;
+			}
+
+			public int getNumberOfViews() { //complex core
+				return numberOfViews;
+			}
+
+			public void setNumberOfViews(int views) { //complex core
+				this.numberOfViews = views;
+			}
+
+			public void increaseNumberOfViews() { //complex core
+				this.numberOfViews ++;
 			}
 		}
 	}
@@ -1282,28 +1541,42 @@ delta cBase {
 		import javax.microedition.lcdui.Item;
 		import javax.microedition.lcdui.TextField;
 
-		public class NewAlbumScreen extends Form {
+		public class NewLabelScreen extends Form {
 
-			TextField albumName = new TextField("Album Name", "", 15, TextField.ANY);
+			public static final int NEW_ALBUM = 0;
+			public static final int LABEL_PHOTO = 1;
+
+			TextField labelName = new TextField("Name", "", 15, TextField.ANY);
 
 			Command ok;
 			Command cancel;
 
-			public NewAlbumScreen(String name) {
+			private int formType;
+
+			public NewLabelScreen(String name, int type) {
 				super(name);
-				this.append(albumName);
+				this.formType = type;
+				this.append(labelName);
 				ok = new Command("Save", Command.SCREEN, 0);
 				cancel = new Command("Cancel", Command.EXIT, 1);
 				this.addCommand(ok);
 				this.addCommand(cancel);
 			}
 
-			public NewAlbumScreen(String title, Item [] items) {
+			public NewLabelScreen(String title, Item [] items) {
 				super(title, items);
 			}
 
-			public String getAlbumName() {
-				return albumName.getString();
+			public String getLabelName() {
+				return labelName.getString();
+			}
+
+			public void setFormType(int formType) {
+				this.formType = formType;
+			}
+
+			public int getFormType() {
+				return formType;
 			}
 		}
 	}
@@ -1320,6 +1593,8 @@ delta cBase {
 			public static final Command backCommand = new Command("Back", Command.BACK, 0);
 			public static final Command addCommand = new Command("Add", Command.ITEM, 1);
 			public static final Command deleteCommand = new Command("Delete", Command.ITEM, 1);
+			public static final Command editLabelCommand = new Command("Edit Label", Command.ITEM, 1);
+			public static final Command sortCommand = new Command("Sort by Views", Command.ITEM, 1); //complex core
 
 			public PhotoListScreen() {
 				super("Choose Items", Choice.IMPLICIT);
@@ -1329,6 +1604,12 @@ delta cBase {
 				this.addCommand(backCommand);
 				this.addCommand(addCommand);
 				this.addCommand(deleteCommand);
+				this.addCommand(editLabelCommand);
+				this.addOtherCommands(); //complex core
+			}
+
+			private void addOtherCommands() { //complex core
+				this.addCommand(sortCommand);
 			}
 		}
 	}
@@ -1394,6 +1675,7 @@ delta cBase {
 				System.out.println("PhotoViewScreen::paint(): Image object was null.");
 
 				g.drawImage(image, 0, 0, Graphics.TOP | Graphics.LEFT);
+
 			}
 		}
 	}
@@ -1526,28 +1808,63 @@ delta cBase {
 
 			public byte [] getBytesFromImageInfo(ImageData ii) throws InvalidImageDataException {
 				try {
-					String byteString = new String();
-
-					int i = ii.getRecordId();
-					Integer j = new Integer(i);
-					byteString = byteString.concat(j.toString());
-					byteString = byteString.concat(DELIMITER);
-
-					int i2 = ii.getForeignRecordId();
-					Integer j2 = new Integer(i2);
-					byteString = byteString.concat(j2.toString());
-					byteString = byteString.concat(DELIMITER);
-
-					byteString = byteString.concat(ii.getParentAlbumName());
-					byteString = byteString.concat(DELIMITER);
-
-					byteString = byteString.concat(ii.getImageLabel());
-
+					String byteString = retrieveImageByteString(ii);
 					return byteString.getBytes();
 				}
 				catch(Exception e) {
 					throw new InvalidImageDataException("The provided data are not valid");
 				}
+			}
+
+			private String retrieveImageByteString(ImageData ii) {
+				String byteString = new String();
+
+				int i = ii.getRecordId();
+				Integer j = new Integer(i);
+				byteString = byteString.concat(j.toString());
+				byteString = byteString.concat(DELIMITER);
+
+				int i2 = ii.getForeignRecordId();
+				Integer j2 = new Integer(i2);
+				byteString = byteString.concat(j2.toString());
+				byteString = byteString.concat(DELIMITER);
+
+				byteString = byteString.concat(ii.getParentAlbumName());
+				byteString = byteString.concat(DELIMITER);
+
+				byteString = byteString.concat(ii.getImageLabel());
+
+				byteString = byteString.concat(retrieveAditionalImageDataByteString(ii)); //complex core
+
+				return byteString;
+			}
+
+			private String retrieveAditionalImageDataByteString(ImageData ii) { //complex core
+
+				String byteString = new String();
+				byteString = byteString.concat(DELIMITER);
+				byteString = byteString.concat("" + ii.getNumberOfViews());
+				return byteString;
+			}
+
+			protected void setImageNumberOfViews(ImageData ii, String iiString,
+					int startIndex, int endIndex, String delimiter) { //complex core
+
+				startIndex = endIndex + 1;
+				endIndex = iiString.indexOf(delimiter, startIndex);
+
+				if(endIndex == -1) endIndex = iiString.length();
+
+				int numberOfViews = 0;
+				try {
+					numberOfViews = Integer.parseInt(iiString.substring(startIndex, endIndex));
+				}
+				catch(RuntimeException e) {
+					numberOfViews = 0;
+					e.printStackTrace();
+				}
+
+				ii.setNumberOfViews(numberOfViews);
 			}
 		}
 	}

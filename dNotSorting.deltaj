@@ -1,0 +1,85 @@
+delta dNotSorting {
+
+//package lancs.mobilemedia.core.ui.controller
+
+	modifies lancs.mobilemedia.core.ui.controller.BaseController {
+
+		removes import lancs.mobilemedia.core.ui.controller.SortByViews;
+
+		removes SHOW_IMAGE_LIST_SORTING_MODE;
+
+		modifies aditionalCommands() {
+			return;
+		}
+
+		removes exchange(ImageData, int, int);
+
+		removes bubbleSort(ImageData[]);
+
+		modifies fillImageList(PhotoListScreen imageList, ImageData [] images,
+				int imageListMode) {
+			//complex core - duplicated code
+			for(int i = 0; i < images.length; i ++) {
+				if(images[i] != null) {
+					imageList.append(images[i].getImageLabel(), null);
+				}
+			}
+		}
+	}
+
+	//package lancs.mobilemedia.core.ui.controller
+
+	removes lancs.mobilemedia.core.ui.controller.SortByViews;
+
+	modifies lancs.mobilemedia.core.ui.controller.ViewPhoto {
+
+		removes import javax.microedition.lcdui.Alert;
+		removes import javax.microedition.lcdui.AlertType;
+		removes import javax.microedition.lcdui.Display;
+
+		removes import lancs.mobilemedia.core.ui.datamodel.ImageData;
+		removes import lancs.mobilemedia.lib.exceptions.ImageNotFoundException;
+		removes import lancs.mobilemedia.lib.exceptions.NullAlbumDataReference;
+
+		removes increasePhotoNumberOfViews(BaseController, String);
+
+		modifies aditionalActions(BaseController controller) {
+			return;
+		}
+	}
+
+	//package lancs.mobilemedia.core.ui.datamodel
+
+	modifies lancs.mobilemedia.core.ui.datamodel.ImageData {
+
+		removes numberOfViews;
+
+		removes getNumberOfViews();
+
+		removes setNumberOfViews(int);
+
+		removes increaseNumberOfViews();
+	}
+
+	//package lancs.mobilemedia.core.ui.screens
+
+	modifies lancs.mobilemedia.core.ui.screens.PhotoListScreen {
+
+		removes sortCommand;
+
+		modifies addOtherCommands() {
+			return;
+		}
+	}
+
+	//package lancs.mobilemedia.core.util
+
+	modifies lancs.mobilemedia.core.util.ImageUtil {
+
+		removes setImageNumberOfViews(ImageData, String, int, int, String);
+
+		modifies retrieveAditionalImageDataByteString(ImageData ii) {
+			return "";
+		}
+	}
+}
