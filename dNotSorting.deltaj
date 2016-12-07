@@ -17,13 +17,9 @@ delta dNotSorting {
 		removes bubbleSort(ImageData[]);
 
 		modifies fillImageList(PhotoListScreen imageList, ImageData [] images,
-				int imageListMode) {
-			//complex core - duplicated code
-			for(int i = 0; i < images.length; i ++) {
-				if(images[i] != null) {
-					imageList.append(images[i].getImageLabel(), null);
-				}
-			}
+				int imageListMode) { //must came before dFavorites
+
+			appendImages(imageList, images, imageListMode); //complex core
 		}
 	}
 
